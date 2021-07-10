@@ -1,0 +1,453 @@
+你了解 #include 某个 .h 文件后，编译器做了哪些操作么？ 你清楚为什么在 .h文件中定义函数实现的话需要在函数前面加上 static 修饰么？你知道 #ifndef……#define……#endif 这种防止头文件重复包含的精髓所在么？本文就是来探讨这些问题，并给出我的理解和思考，欢迎大家留言交流。
+
+1.  #include 命令的作用
+
+1.1  什么情况不使用 include
+
+//a.c文件 
+ 
+void test_a() 
+{ 
+    return;  
+} 
+ 
+ 
+//b.c文件 
+ 
+void test_a();  // 函数声明
+ 
+void test_b() 
+{ 
+    test_a();    // 由于上面已经声明了，所以可以使用 
+} 
+其实，这样的工程，可以不用使用 include 预编译命令。
+
+1.2  什么情况使用 include
+
+如果工程里面的函数特别多，那么按照上面的做法，则必须在每一个 .c 文件的开头列出所有本文件调用过的函数的声明，这样很不高效，而且一旦某个函数的形式发生变化，又得一个一个改 .c 开头的函数声明。 
+因此，#include 预编译命令诞生。
+
+//a.c文件 
+ 
+void test_a() 
+{ 
+     return;  
+} 
+ 
+//a.h文件 
+ 
+void test_a(); 
+ 
+//b.c文件 
+ 
+#include "a.h"    // 包含含有 test_a() 函数声明的头文件 
+ 
+void test_b() 
+{ 
+    test_a();         
+} 
+1.3  #include 起到什么效果
+
+上述代码在编译器进行预编译的时候，遇到 #include "a.h" ，则会把整个 a.h 文件都copy到 b.c 的开头,就是复制，因此，在实际编译 b.c 之前，b.c 已经被修改为了如下形式：
+
+//b.c 预编译后的临时文件 
+ 
+void test_a(); 
+ 
+void test_b() 
+{ 
+    test_a();         
+} 
+由此可见，得到的效果和手动加 test_a() 函数声明时的效果相同。
+
+#tips# 在Linux下，可以使用 gcc -E b.c 来查看预编译 b.c 后的效果。
+
+2. static 关键词的使用
+
+2.1  什么叫函数重复定义
+
+我们经常会遇到报错，说变量或者函数重复定义。那么，在此，首先我举例说明一下什么叫函数的重复定义。
+
+//a.c文件 
+ 
+void test() 
+{ 
+    return; 
+} 
+ 
+//b.c文件 
+ 
+void test() 
+{ 
+    return; 
+} 
+那么，在编译的时候是不会报错的，但是，在链接的时候，会出现报错：
+
+multiple definition of `test'，因为在同一个工程里面出现了两个test函数的定义。
+
+2.2  在.h里面写函数实现
+
+如果在 .h 里面写了函数实现，会出现什么情况？
+
+//a.h文件 
+ 
+void test_a() 
+{ 
+   return;     
+} 
+ 
+//b.c文件 
+ 
+#include "a.h" 
+ 
+void test_b() 
+{ 
+    test_a(); 
+} 
+预编译后，会发现，b.c 被修改为如下形式：
+
+//b.c 预编译后的临时文件 
+ 
+void test_a() 
+{ 
+   return;     
+} 
+ 
+void test_b() 
+{ 
+    test_a(); 
+} 
+当然，这样目前是没有什么问题的，可以正常编译链接成功。但是，如果有一个 c.c 也包含的 a.h 的话，怎么办？
+
+//c.c文件 
+ 
+#include "a.h" 
+ 
+void test_c() 
+{ 
+    test_a(); 
+} 
+同上，c.c 在预编译后，也形成了如下代码：
+
+// c.c 预编译后的临时文件 
+ 
+void test_a() 
+{ 
+    return;     
+} 
+ 
+void test_c() 
+{ 
+    test_a(); 
+} 
+那么，在链接器进行链接（link）的时候，会报错：
+
+ multiple definition of `test_a'
+
+因此，在 .h 里面写函数实现的弊端就暴露出来了。但是，经常会有这样的需求，将一个函数设置为 内联（inline） 函数，并且放在 .h 文件里面，那么，怎样才能防止出现上述 重复定义的报错呢？
+
+2.3  static 关键词
+
+应对上面的情况，static关键词很好地解决了这个问题。
+
+用static修饰函数，则表明该函数只能在本文件中使用，因此，当不同的文件中有相同的函数名被static修饰时，不会产生重复定义的报错。例如：
+
+//a.c文件 
+ 
+static void test() 
+{ 
+    return; 
+} 
+ 
+void test_a() 
+{ 
+    test(); 
+} 
+ 
+//b.c文件 
+ 
+static void test() 
+{ 
+    return; 
+} 
+ 
+void test_b() 
+{ 
+    test(); 
+} 
+编译工程时不会报错，但是test()函数只能被 a.c 和 b.c 中的函数调用，不能被 c.c 等其他文件中的函数调用。
+
+那么，用static修饰 .h 文件中定义的函数，会有什么效果呢？
+
+//a.h文件 
+ 
+static void test() 
+{ 
+    return; 
+} 
+ 
+//b.c文件 
+ 
+#include "a.h" 
+ 
+void test_b() 
+{ 
+    test(); 
+} 
+ 
+//c.c文件 
+ 
+#include "a.h" 
+ 
+void test_c() 
+{ 
+    test(); 
+} 
+这样的话，在预编译后，b.c 和 c.c 文件中，由于 #include "a.h" ，故在这两个文件开头都会定义 static void test() 函数，因此，test_b() 和 test_c() 均调用的是自己文件中的 static void test() 函数 ， 因此不会产生重复定义的报错。
+
+因此，结论，在 .h 文件中定义函数的话，建议一定要加上 static 关键词修饰，这样，在被多个文件包含时，才不会产生重复定义的错误。
+
+3.  防止头文件重复包含
+
+经常写程序的人都知道，我们在写 .h 文件的时候，一般都会加上
+
+#ifndef    XXX 
+#define   XXX  
+…… 
+#endif 
+这样做的目的是为了防止头文件的重复包含，具体是什么意思呢？
+
+它不是为了防止多个文件包含某一个头文件，而是为了防止一个头文件被同一个文件包含多次。具体说明如下：
+
+//a.h文件 
+ 
+static void test_a() 
+{ 
+    return; 
+} 
+ 
+//b.c文件 
+ 
+#include "a.h" 
+ 
+void test_b() 
+{ 
+    test_a(); 
+} 
+ 
+//c.c 
+ 
+#include "a.h" 
+ 
+void test_c() 
+{ 
+    test_a(); 
+} 
+这样是没有问题的，但下面这种情况就会有问题。
+
+//a.h文件 
+ 
+static void test_a() 
+{ 
+    return; 
+} 
+ 
+//b.h文件 
+ 
+#include "a.h" 
+ 
+//c.h文件 
+ 
+#include "a.h" 
+ 
+//main.c文件 
+ 
+#include "b.h" 
+#include "c.h" 
+ 
+void main() 
+{ 
+    test_a(); 
+} 
+这样就“不小心”产生问题了，因为 b.h 和 c.h 都包含了 a.h，那么，在预编译main.c 文件的时候，会展开为如下形式：
+
+//main.c 预编译之后的临时文件 
+ 
+static void test_a() 
+{ 
+    return; 
+} 
+ 
+static void test_a() 
+{ 
+    return; 
+} 
+ 
+void main() 
+{ 
+    test_a(); 
+} 
+在同一个 .c 里面，出现了两次 test_a() 的定义，因此，会出现重复定义的报错。
+
+但是，如果在 a.h 里面加上了 #ifndef……#define……#endif 的话，就不会出现这个问题了。
+
+例如，上面的 a.h 改为：
+
+//a.h 文件 
+ 
+#ifndef  A_H 
+#define A_H 
+ 
+static void test_a() 
+{ 
+    return; 
+} 
+ 
+#endif 
+预编译展开main.c则会出现：
+
+//main.c 预编译后的临时文件 
+ 
+#ifndef A_H 
+#define A_H 
+ 
+static void test_a() 
+{ 
+    return; 
+} 
+ 
+#endif 
+ 
+#ifndef A_H 
+#define A_H 
+ 
+static void test_a() 
+{ 
+    return; 
+} 
+ 
+#endif 
+ 
+void main() 
+{ 
+    test_a(); 
+} 
+在编译main.c时，当遇到第二个 #ifndef  A_H ，由于前面已经定义过 A_H，故此段代码被跳过不编译，因此，不会产生重复定义的报错。这就是  #ifndef……#define……#endif 的精髓所在。
+
+本文出自 “对影成三人” 博客，请务必保留此出处http://ticktick.blog.51cto.com/823160/596179
+
+ 
+
+http://blog.chinaunix.net/uid-26435987-id-3077444.html
+
+因为对于一个大程序而言,我们可能要定义很多常量( 不管是放在源文件还是头文件 ),那么我们有时考虑定义某个常量时,我们就必须返回检查原来此常量是否定义,但这样做很麻烦.if defined宏正是为这种情况提供了解决方案.举个例子,如下: 
+#define .... 
+#define .... 
+    .... 
+    .... 
+#define a 100 
+    .... 
+此时，我们要检查a是否定义（假设我们已经记不着这点了）,或者我们要给a一个不同的值，就加入如下句子 
+#if defined a 
+#undef a 
+#define a 200 
+#endif 
+上述语句检验a是否被定义，如果被定义，则用#undef语句解除定义，并重新定义a为200 
+
+同样，检验a是否定义： 
+#ifndef a    //如果a没有被定义 
+#define a 100 
+#endif 
+
+以上所用的宏中：#undef为解除定义，#ifndef是if not defined的缩写，即如果没有定义。 
+
+这就是#if defined 的唯一作用！
+1） 
+#if defined XXX_XXX 
+#endif 
+是条件编译，是根据你是否定义了XXX_XXX这个宏，而使用不同的代码。 
+
+一般.h文件里最外层的 
+#if !defined XXX_XXX 
+#define XXX_XXX 
+#endif 
+是为了防止这个.h头文件被重复include。 
+
+2） 
+#error XXXX 
+是用来产生编译时错误信息XXXX的，一般用在预处理过程中； 
+例子： 
+#if !defined(__cplusplus) 
+#error C++ compiler required. 
+#endif 
+ 
+ 
+有一道经典的C语言问题，关于宏定义中#和##符号的使用和宏定义展开问题
+ 
+程序如下：
+
+#include <stdio.h>
+#define f(a,b) a##b
+#define g(a)  #a
+#define h(a) g(a)
+ 
+int main()
+{
+        printf("%s\n", h(f(1,2)));
+        printf("%s\n", g(f(1,2)));
+        return 0;
+}
+
+答案：第一行：12  第二行：f(1,2)
+
+说明：
+
+1、关于符号#和##
+
+两个符号都只能用于预处理宏扩展。不能在普通的源码中使用它们，只能在宏定义中使用。
+
+简单的说，#是把宏参数变为一个字符串，##是把两个宏参数连接在一起。
+
+关于这两个符号的具体意义和用法可以参见两篇文章：
+
+#和##在宏替换中的作用 http://www.linuxidc.com/Linux/2014-06/102921.htm
+
+C/C++ 宏中"#"和"##"的用法 http://www.linuxidc.com/Linux/2014-06/102924.htm
+
+还有GCC帮助文档上的解释：
+
+3.4 Stringification
+
+3.5 Concatenation
+
+2、关于宏展开
+
+预处理过程的几个步骤：
+
+1）字符集转换（如三联字符）
+
+2）断行链接/
+
+3）注释处理，/* comment */，被替换成空格
+
+4）执行预处理命令，如#inlcude、#define、#pragma、#error等
+
+5）转义字符替换
+
+6）相邻字符串拼接
+
+7）将预处理记号替换为词法记号
+
+第4）步即如何展开宏函数的规则：在展开当前宏函数时，如果形参有#或##则不进行宏参数的展开，否则先展开宏参数，再展开当前宏。
+
+宏替换顺序英文描述如下：
+
+A parameter in the replacement list, unless preceded by a # or ## preprocessing token or followed by a ## preprocessing token, is replaced by the corresponding argument after all macros contained therein have been expanded.
+
+3、总结
+
+综合以上，对于这道题来说，第一行h(f(1,2))，由于h(a)非#或者##所以先展开其参数f(1,2)，即12，所以变成h(12)，然后再宏替换为g(12)，再次替换为12。
+
+第二行g(f(1,2))，宏g(a)带有#，所以里面的f(1,2)不展开，所以变成f(1,2)
+
+类似的这种问题在《你必须知道的495个C语言问题》中出现过，在121页的“预处理功能”的问题11.19，有兴趣的朋友可以看一看。
