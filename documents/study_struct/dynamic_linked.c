@@ -17,7 +17,7 @@ struct student *creat(void)				//链表创建函数
 	struct student *p1,*p2;
 	n=0;								
 	p1=p2=(struct student*)malloc(LEN);	//在标准库中malloc函数给到的是一个void类型的空间，需要用强制转换符来获得合适类型的空间
-	printf("请输入学生学号和分数,中间用英文逗号隔开:");
+	printf("请输入key和value,中间用英文逗号隔开:");
 	scanf("%ld,%f",&p1->num,&p1->score);//录入第一个学生信息
 	head=NULL;							//在不确定信息是否有效时，动态链表应该为空，也即头指针指向为空
 	while(p1->num!=0)					//这里假定学生学号不为零，若输入零代表这个动态链表结束链接
@@ -30,7 +30,7 @@ struct student *creat(void)				//链表创建函数
 		else p2->next=p1;				
 		p2=p1;							//再让p2向前指一位，以便于下次操作，此时p1、p2都指向最新加入链表的成员							
 		p1=(struct student*)malloc(LEN);//让p1开辟新的studdent类型的空间，输入下一个链表成员信息。可以理解为while循环中的x++ 
-		printf("请输入学生学号和分数,中间用英文逗号隔开:");
+		printf("请输入key和value,中间用英文逗号隔开:");
 		scanf("%ld,%f",&p1->num,&p1->score);
 	}
 	p2->next=NULL;						//最后一位链表成员不再链接其他东西，这里的指向NULL相当于表尾 
